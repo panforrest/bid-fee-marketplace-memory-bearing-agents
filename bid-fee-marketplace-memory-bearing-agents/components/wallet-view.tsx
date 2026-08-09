@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatUsd } from "@/lib/utils";
 import { formatCount } from "@/lib/types";
+import { RainTopup } from "@/components/rain-topup";
 
 interface Entry {
   id: number;
@@ -34,18 +35,20 @@ export function WalletView() {
   const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) await supabase.auth.signInAnonymously();
-      await supabase.rpc("ensure_org", {});
-      const { data: w } = await supabase.rpc("get_my_wallet");
-      setData((w as WalletData) ?? null);
-      setLoading(false);
-    })();
+  const load = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) await supabase.auth.signInAnonymously();
+    await supabase.rpc("ensure_org", {});
+    const { data: w } = await supabase.rpc("get_my_wallet");
+    setData((w as WalletData) ?? null);
+    setLoading(false);
   }, [supabase]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (loading) {
     return <div className="container py-24 text-center text-bone/50">Loading your wallet…</div>;
@@ -85,6 +88,11 @@ export function WalletView() {
           <p className="mt-1 text-4xl font-semibold tabular-nums text-bone/80">{formatUsd(creditedBack)}</p>
           <p className="mt-1 text-xs text-bone/40">from lost auctions</p>
         </div>
+      </div>
+
+      {/* fund allowance in USDC via Rain */}
+      <div className="mt-4">
+        <RainTopup orgId={data?.org_id ?? null} onFunded={load} />
       </div>
 
       {/* credit-back explainer */}
