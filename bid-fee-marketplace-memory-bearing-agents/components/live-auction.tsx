@@ -30,6 +30,22 @@ interface SettleResult {
   } | null;
 }
 
+interface TransferReceipt {
+  txHash: string;
+  explorerUrl: string | null;
+  from: string;
+  to: string;
+  amountMon: string;
+  mode: "live" | "simulated";
+}
+
+interface BalanceEntry {
+  label: string;
+  role: "bidder" | "seller";
+  address: string | null;
+  mon: string | null;
+}
+
 const ERROR_COPY: Record<string, string> = {
   AUCTION_CLOSED: "This auction has closed.",
   INSUFFICIENT_BIDS: "You're out of bids. Top up in your wallet.",
@@ -58,6 +74,8 @@ export function LiveAuction({
   const [settleResult, setSettleResult] = useState<SettleResult | null>(null);
   const [bidderName, setBidderName] = useState<string | null>(null);
   const [bidderWallet, setBidderWallet] = useState<string | null>(null);
+  const [lastTransfer, setLastTransfer] = useState<TransferReceipt | null>(null);
+  const [balances, setBalances] = useState<BalanceEntry[] | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -77,6 +95,19 @@ export function LiveAuction({
       setOffsetMs(new Date(s.server_now).getTime() - Date.now());
     }
   }, [supabase, auctionId]);
+
+  // Read on-chain MON balances for both bidders + the seller.
+  const refreshBalances = useCallback(async () => {
+    try {
+      const res = await fetch("/api/chain/balances", { cache: "no-store" });
+      if (res.ok) {
+        const json = (await res.json()) as { balances: BalanceEntry[] };
+        setBalances(json.balances);
+      }
+    } catch {
+      /* balances are best-effort; ignore */
+    }
+  }, []);
 
   // Auth (anonymous) + provision wallet + initial fetch
   useEffect(() => {
@@ -133,6 +164,14 @@ export function LiveAuction({
     };
   }, [supabase, auctionId, refetch]);
 
+  // Live on-chain balances: initial read + gentle poll so viewers watch the
+  // bidders' MON go down and the seller's go up.
+  useEffect(() => {
+    refreshBalances();
+    const id = setInterval(refreshBalances, 5000);
+    return () => clearInterval(id);
+  }, [refreshBalances]);
+
   const placeBid = useCallback(async (units: number) => {
     const now = Date.now();
     if (now - lastBidAt.current < 400) return; // client-side debounce
@@ -155,6 +194,27 @@ export function LiveAuction({
         if (row.ok) {
           setMyBids(row.bid_balance);
           pushToast(`Bid placed — you're leading at ${formatTokens(row.price_cents)}`, "ok");
+          // REAL on-chain value movement: this bidder's wallet sends MON to the
+          // seller. Fire-and-forget so the UI stays snappy; surface the receipt
+          // and refresh balances when it lands.
+          if (bidderWallet) {
+            fetch("/api/chain/bid-transfer", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ auctionId, bidderAddress: bidderWallet }),
+            })
+              .then((r) => r.json())
+              .then((rc: TransferReceipt) => {
+                setLastTransfer(rc);
+                if (rc.mode === "live") {
+                  pushToast(`On-chain: sent ${rc.amountMon} MON → seller ✓`, "ok");
+                }
+                refreshBalances();
+              })
+              .catch(() => {
+                /* transfer is best-effort for the demo */
+              });
+          }
         } else {
           pushToast(ERROR_COPY[row.error ?? ""] ?? row.error ?? "Bid failed", "err");
           if (row.bid_balance != null) setMyBids(row.bid_balance);
@@ -164,7 +224,7 @@ export function LiveAuction({
       setPlacing(false);
       refetch();
     }
-  }, [supabase, auctionId, pushToast, refetch]);
+  }, [supabase, auctionId, pushToast, refetch, bidderWallet, refreshBalances]);
 
   const endAuctionNow = useCallback(async () => {
     if (settling) return;
@@ -386,6 +446,31 @@ export function LiveAuction({
             )}
           </div>
 
+          {/* ON-CHAIN per-bid transfer receipt (bidder loses MON, seller gains) */}
+          {lastTransfer && (
+            <div className="mt-3 rounded-lg border border-cyan/25 bg-cyan/[0.05] px-3 py-2 text-xs text-cyan">
+              On-chain: sent{" "}
+              <span className="font-semibold">{lastTransfer.amountMon} MON</span> → seller ✓{" "}
+              <span className="text-[10px] uppercase tracking-wide text-bone/40">
+                ({lastTransfer.mode === "live" ? "Monad testnet" : "Sandbox"})
+              </span>{" "}
+              {lastTransfer.explorerUrl ? (
+                <a
+                  href={lastTransfer.explorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-cyan hover:underline"
+                >
+                  tx {shortWallet(lastTransfer.txHash)} ↗
+                </a>
+              ) : (
+                <span className="font-mono text-bone/50">
+                  tx {shortWallet(lastTransfer.txHash)}
+                </span>
+              )}
+            </div>
+          )}
+
           {isLeader && !isClosed && !settled && (
             <div className="mt-4 rounded-lg border border-cyan/30 bg-cyan/5 px-4 py-2 text-center text-sm text-cyan">
               🏆 You&apos;re the highest bidder. Sit tight — you can&apos;t bid against yourself.
@@ -534,6 +619,57 @@ export function LiveAuction({
 
       {/* ---------------- RIGHT: the asset ---------------- */}
       <div className="space-y-4">
+        {/* LIVE ON-CHAIN BALANCES — the money-shot: bidders down, seller up */}
+        <div className="rounded-2xl border border-cyan/30 bg-cyan/[0.04] p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-cyan">
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan" />
+            Live on-chain balances
+          </h3>
+          {balances ? (
+            <ul className="space-y-2">
+              {balances.map((b) => (
+                <li
+                  key={b.label}
+                  className="flex items-center justify-between rounded-lg border border-border/60 bg-white/[0.02] px-3 py-2"
+                >
+                  <span className="min-w-0">
+                    <span
+                      className={[
+                        "block text-sm font-medium",
+                        b.role === "seller" ? "text-gold" : "text-bone/80",
+                      ].join(" ")}
+                    >
+                      {b.label}
+                      {bidderWallet &&
+                      b.address &&
+                      b.address.toLowerCase() === bidderWallet.toLowerCase() ? (
+                        <span className="ml-1 text-[10px] text-cyan">(you)</span>
+                      ) : null}
+                    </span>
+                    <span className="block font-mono text-[10px] text-bone/40">
+                      {b.address ? shortWallet(b.address) : "not configured"}
+                    </span>
+                  </span>
+                  <span
+                    className={[
+                      "shrink-0 text-right font-mono text-sm tabular-nums",
+                      b.role === "seller" ? "text-gold" : "text-bone",
+                    ].join(" ")}
+                  >
+                    {b.mon != null ? `${Number(b.mon).toFixed(4)} MON` : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-bone/40">Reading balances from Monad…</p>
+          )}
+          <p className="mt-3 text-[10px] leading-relaxed text-bone/40">
+            Each bid sends {lastTransfer?.amountMon ?? "0.05"} MON from the bidder to the
+            deployer / seller on Monad testnet. Watch the bidder go down and the deployer go up.
+          </p>
+        </div>
+
         <div className="rounded-2xl border border-border bg-card p-5">
           <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-bone/50">
             The memory
