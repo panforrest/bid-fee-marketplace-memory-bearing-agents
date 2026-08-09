@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AuctionState, formatBytes, formatCount } from "@/lib/types";
 import { formatTokens } from "@/lib/utils";
+import { resolveBidderIdentity, shortWallet } from "@/lib/bidder";
 import { Countdown } from "@/components/countdown";
 
 type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
@@ -12,12 +13,21 @@ type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
 interface SettleResult {
   status: string;
   price_cents: number;
+  usdc: number;
   winner: { org_id: string; name: string | null } | null;
+  seller: { org_id: string; name: string | null } | null;
+  rain: {
+    status: string;
+    usdc: number;
+    reference: string;
+    network: string;
+    mode: string;
+  } | null;
   receipt: {
     tx_hash: string;
     explorer_url: string | null;
     mode: "live" | "simulated";
-  };
+  } | null;
 }
 
 const ERROR_COPY: Record<string, string> = {
@@ -46,6 +56,8 @@ export function LiveAuction({
   const [openAmount, setOpenAmount] = useState<number>(1); // opening-bid entry in Servitor tokens (1 token = $1 = 100 credits)
   const [settling, setSettling] = useState(false);
   const [settleResult, setSettleResult] = useState<SettleResult | null>(null);
+  const [bidderName, setBidderName] = useState<string | null>(null);
+  const [bidderWallet, setBidderWallet] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -79,7 +91,14 @@ export function LiveAuction({
           pushToast("Couldn't start a guest session. Is anonymous auth enabled?", "err");
         }
       }
-      const { data: org } = await supabase.rpc("ensure_org", {});
+      const identity = resolveBidderIdentity();
+      if (active) {
+        setBidderName(identity.name);
+        setBidderWallet(identity.wallet);
+      }
+      const { data: org } = await supabase.rpc("ensure_org", {
+        p_display_name: identity.name,
+      });
       if (active && org && org[0]) {
         setMyOrgId(org[0].org_id);
         setMyBids(org[0].bid_balance);
@@ -214,6 +233,13 @@ export function LiveAuction({
         {/* header */}
         <div className="mb-4 flex items-center gap-3">
           <Link href="/" className="text-sm text-bone/50 hover:text-bone">← Lots</Link>
+          {(bidderName || bidderWallet) && (
+            <span className="ml-auto flex items-center gap-2 rounded-lg border border-cyan/30 bg-cyan/10 px-3 py-1.5 text-xs font-medium text-cyan">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan" />
+              You are <span className="text-bone/90">{bidderName ?? "Guest"}</span>
+              {bidderWallet && <span className="font-mono text-cyan/80">{shortWallet(bidderWallet)}</span>}
+            </span>
+          )}
         </div>
         <div className="flex items-start gap-4">
           <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 text-4xl">
@@ -403,34 +429,53 @@ export function LiveAuction({
                   Auction closed — no bids, no winner.
                 </p>
               )}
-              {settleResult ? (
-                <p className="mt-2 text-sm text-cyan">
-                  Monad transaction completed ✓{" "}
-                  <span className="text-[11px] uppercase tracking-wide text-bone/40">
-                    ({settleResult.receipt.mode === "live" ? "On-chain" : "Sandbox"})
-                  </span>
-                  <br />
-                  {settleResult.receipt.explorer_url ? (
-                    <a
-                      href={settleResult.receipt.explorer_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-mono text-[11px] text-cyan hover:underline"
-                    >
-                      tx {settleResult.receipt.tx_hash} ↗
-                    </a>
-                  ) : (
-                    <span className="font-mono text-[11px] text-bone/50">
-                      tx {settleResult.receipt.tx_hash}
-                    </span>
+              {settleResult && hasWinner ? (
+                <div className="mt-3 space-y-1.5 text-sm">
+                  {settleResult.rain && (
+                    <p className="text-cyan">
+                      Paid seller{settleResult.seller?.name ? ` ${settleResult.seller.name}` : ""} $
+                      {settleResult.usdc.toFixed(2)} USDC via Rain ✓{" "}
+                      <span className="text-[11px] uppercase tracking-wide text-bone/40">
+                        ({settleResult.rain.mode === "live" ? "Live" : "Sandbox"})
+                      </span>
+                    </p>
                   )}
-                </p>
+                  {settleResult.receipt ? (
+                    <p className="text-cyan">
+                      Anchored on Monad ✓{" "}
+                      <span className="text-[11px] uppercase tracking-wide text-bone/40">
+                        ({settleResult.receipt.mode === "live" ? "On-chain" : "Sandbox"})
+                      </span>
+                      <br />
+                      {settleResult.receipt.explorer_url ? (
+                        <a
+                          href={settleResult.receipt.explorer_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-[11px] text-cyan hover:underline"
+                        >
+                          tx {settleResult.receipt.tx_hash} ↗
+                        </a>
+                      ) : (
+                        <span className="font-mono text-[11px] text-bone/50">
+                          tx {settleResult.receipt.tx_hash}
+                        </span>
+                      )}
+                    </p>
+                  ) : null}
+                  <Link
+                    href={`/audit/${auctionId}`}
+                    className="inline-block pt-1 text-[11px] text-cyan hover:underline"
+                  >
+                    Full audit trail →
+                  </Link>
+                </div>
               ) : (
                 <Link
                   href={`/audit/${auctionId}`}
                   className="mt-2 inline-block text-sm text-cyan hover:underline"
                 >
-                  View Monad receipt on the audit trail →
+                  View settlement on the audit trail →
                 </Link>
               )}
             </div>

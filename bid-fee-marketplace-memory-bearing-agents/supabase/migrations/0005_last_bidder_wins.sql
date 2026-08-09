@@ -82,6 +82,9 @@ begin
     insert into wallets (org_id, bid_balance, credit_cents) values (v_org, 100000, 0);
     insert into credit_entries (org_id, kind, bid_delta, reason)
       values (v_org, 'subscription_grant', 100000, 'Welcome allowance (demo)');
+  elsif nullif(p_display_name,'') is not null then
+    -- Re-label an existing guest when a pre-labeled URL is opened.
+    update organizations set legal_name = p_display_name where id = v_org;
   end if;
 
   return query

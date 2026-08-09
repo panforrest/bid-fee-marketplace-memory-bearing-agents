@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatUsd } from "@/lib/utils";
 import { formatCount } from "@/lib/types";
+import { resolveBidderIdentity } from "@/lib/bidder";
 import { RainTopup } from "@/components/rain-topup";
 
 interface Entry {
@@ -40,7 +41,7 @@ export function WalletView() {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) await supabase.auth.signInAnonymously();
-    await supabase.rpc("ensure_org", {});
+    await supabase.rpc("ensure_org", { p_display_name: resolveBidderIdentity().name });
     const { data: w } = await supabase.rpc("get_my_wallet");
     setData((w as WalletData) ?? null);
     setLoading(false);

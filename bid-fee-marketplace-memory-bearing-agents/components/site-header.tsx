@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BidderBadge } from "@/components/bidder-badge";
 
 export function SiteHeader() {
   return (
@@ -32,6 +33,7 @@ export function SiteHeader() {
           >
             GitHub
           </a>
+          <BidderBadge />
         </nav>
       </div>
     </header>
