@@ -30,13 +30,14 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
     .order("created_at", { ascending: false });
 
   const receipts: AnchorReceipt[] = (events ?? []).map((e) => {
-    const p = (e.payload ?? {}) as Record<string, string>;
+    const p = (e.payload ?? {}) as Record<string, string | null>;
     return {
-      tx_hash: p.tx_hash,
-      digest: p.digest,
+      tx_hash: p.tx_hash ?? "",
+      digest: p.digest ?? "",
       explorer_url: p.explorer_url ?? null,
-      network: p.network,
+      network: p.network ?? "monad-testnet",
       mode: (p.mode as "live" | "simulated") ?? "simulated",
+      reason: p.reason ?? null,
       at: e.at as string,
     };
   });

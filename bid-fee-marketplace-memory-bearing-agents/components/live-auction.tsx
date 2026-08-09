@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AuctionState, formatBytes, formatCount } from "@/lib/types";
 import { formatTokens } from "@/lib/utils";
 import { resolveBidderIdentity, shortWallet } from "@/lib/bidder";
+import { humanizeSandboxReason } from "@/lib/monad/reasons";
 import { Countdown } from "@/components/countdown";
 
 type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
@@ -27,6 +28,7 @@ interface SettleResult {
     tx_hash: string;
     explorer_url: string | null;
     mode: "live" | "simulated";
+    reason?: string;
   } | null;
 }
 
@@ -37,6 +39,7 @@ interface TransferReceipt {
   to: string;
   amountMon: string;
   mode: "live" | "simulated";
+  reason?: string;
 }
 
 interface BalanceEntry {
@@ -453,7 +456,12 @@ export function LiveAuction({
               <span className="font-semibold">{lastTransfer.amountMon} MON</span> → seller ✓{" "}
               <span className="text-[10px] uppercase tracking-wide text-bone/40">
                 ({lastTransfer.mode === "live" ? "Monad testnet" : "Sandbox"})
-              </span>{" "}
+              </span>
+              {lastTransfer.mode === "simulated" && lastTransfer.reason && (
+                <span className="block text-[10px] text-bone/45">
+                  Sandbox — {humanizeSandboxReason(lastTransfer.reason)}
+                </span>
+              )}{" "}
               {lastTransfer.explorerUrl ? (
                 <a
                   href={lastTransfer.explorerUrl}
@@ -531,6 +539,11 @@ export function LiveAuction({
                       <span className="text-[11px] uppercase tracking-wide text-bone/40">
                         ({settleResult.receipt.mode === "live" ? "On-chain" : "Sandbox"})
                       </span>
+                      {settleResult.receipt.mode === "simulated" && settleResult.receipt.reason && (
+                        <span className="block text-[10px] text-bone/45">
+                          Sandbox — {humanizeSandboxReason(settleResult.receipt.reason)}
+                        </span>
+                      )}
                       <br />
                       {settleResult.receipt.explorer_url ? (
                         <a

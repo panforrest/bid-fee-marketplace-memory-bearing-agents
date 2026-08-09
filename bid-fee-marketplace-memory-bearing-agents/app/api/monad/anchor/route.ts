@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       explorer_url: receipt.explorerUrl,
       network: receipt.network,
       mode: receipt.mode,
+      reason: receipt.reason ?? null,
     },
   });
 

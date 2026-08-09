@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { humanizeSandboxReason } from "@/lib/monad/reasons";
 
 export interface AnchorReceipt {
   tx_hash: string;
@@ -8,6 +9,7 @@ export interface AnchorReceipt {
   explorer_url: string | null;
   network: string;
   mode: "live" | "simulated";
+  reason?: string | null;
   at?: string;
 }
 
@@ -42,6 +44,7 @@ export function MonadAnchor({
           explorer_url: r.explorerUrl,
           network: r.network,
           mode: r.mode,
+          reason: r.reason ?? null,
           at: new Date().toISOString(),
         },
         ...prev,
@@ -99,6 +102,11 @@ export function MonadAnchor({
                   {r.mode === "live" ? "On-chain" : "Sandbox"}
                 </span>
               </div>
+              {r.mode === "simulated" && r.reason && (
+                <p className="mt-1 text-[10px] text-bone/45">
+                  Sandbox — {humanizeSandboxReason(r.reason)}
+                </p>
+              )}
               <p className="mt-1 truncate text-bone/70" title={r.digest}>
                 digest {r.digest}
               </p>

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { formatEther } from "viem";
-import { monadPublicClient } from "@/lib/monad/client";
+import {
+  MONAD_RPC_URL,
+  monadPublicClient,
+  normalizeAddress,
+} from "@/lib/monad/client";
 import {
   BIDDER1_ADDRESS,
   BIDDER2_ADDRESS,
@@ -14,6 +18,7 @@ interface BalanceEntry {
   role: "bidder" | "seller";
   address: string | null;
   mon: string | null; // formatted MON, null if unreadable
+  error?: string;
 }
 
 // GET /api/chain/balances
@@ -31,16 +36,27 @@ export async function GET() {
 
   const balances: BalanceEntry[] = await Promise.all(
     targets.map(async (t) => {
-      if (!t.address) return { ...t, mon: null };
+      if (!t.address) {
+        return { ...t, mon: null, error: "address_not_configured" };
+      }
+      const addr = normalizeAddress(t.address);
+      if (!addr) {
+        return { ...t, mon: null, error: "invalid_address" };
+      }
       try {
-        const wei = await client.getBalance({ address: t.address as `0x${string}` });
-        return { ...t, mon: formatEther(wei) };
+        const wei = await client.getBalance({ address: addr as `0x${string}` });
+        return { ...t, address: addr, mon: formatEther(wei) };
       } catch (err) {
+        const msg = err instanceof Error ? err.message : "balance_read_failed";
         console.warn(`[monad] balance read failed for ${t.label}:`, err);
-        return { ...t, mon: null };
+        return { ...t, address: addr, mon: null, error: msg };
       }
     })
   );
 
-  return NextResponse.json({ balances, updatedAt: new Date().toISOString() });
+  return NextResponse.json({
+    balances,
+    rpcUrl: MONAD_RPC_URL,
+    updatedAt: new Date().toISOString(),
+  });
 }

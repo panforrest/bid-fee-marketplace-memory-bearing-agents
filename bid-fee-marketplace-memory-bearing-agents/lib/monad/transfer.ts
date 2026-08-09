@@ -1,8 +1,14 @@
 import "server-only";
 import { createWalletClient, http, parseEther } from "viem";
-import { privateKeyToAccount, mnemonicToAccount } from "viem/accounts";
-import type { Account } from "viem";
-import { monadTestnet } from "@/lib/monad/client";
+import type { SimulationReason } from "@/lib/monad/reasons";
+import {
+  MONAD_EXPLORER_URL,
+  MONAD_RPC_URL,
+  monadTestnet,
+  normalizeAddress,
+  resolveAccount,
+  stripEnvValue,
+} from "@/lib/monad/client";
 
 // ============================================================================
 // Monad — REAL per-bid value movement (the money-shot).
@@ -26,39 +32,26 @@ export interface TransferResult {
   to: string;
   amountMon: string;
   mode: ChainMode;
+  reason?: SimulationReason;
 }
-
-const RPC_URL =
-  process.env.NEXT_PUBLIC_MONAD_RPC_URL || "https://testnet-rpc.monad.xyz";
-const EXPLORER =
-  process.env.NEXT_PUBLIC_MONAD_EXPLORER_URL ||
-  "https://testnet.monadexplorer.com";
 
 export const BIDDER1_ADDRESS =
-  process.env.BIDDER1_ADDRESS || "0x0B58561F2325F9eAB95Ce6cCE5981255D82bc50b";
+  normalizeAddress(
+    process.env.BIDDER1_ADDRESS || "0x0B58561F2325F9eAB95Ce6cCE5981255D82bc50b"
+  ) ?? "0x0B58561F2325F9eAB95Ce6cCE5981255D82bc50b";
 export const BIDDER2_ADDRESS =
-  process.env.BIDDER2_ADDRESS || "0x77dDCFDbD24a04BC150bc5d7EA636c0c990936bd";
-
-// Accept either a raw private key (64 hex, with/without 0x) OR a seed phrase.
-// Strips stray quotes/whitespace that sneak in from copy-paste.
-function resolveAccount(raw: string): Account {
-  const val = raw.trim().replace(/^['"]|['"]$/g, "").trim();
-  const hex = val.startsWith("0x") ? val.slice(2) : val;
-  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
-    return privateKeyToAccount(`0x${hex}` as `0x${string}`);
-  }
-  if (val.split(/\s+/).length >= 12) {
-    return mnemonicToAccount(val);
-  }
-  throw new Error("bidder key is neither a 64-char hex private key nor a seed phrase");
-}
+  normalizeAddress(
+    process.env.BIDDER2_ADDRESS || "0x77dDCFDbD24a04BC150bc5d7EA636c0c990936bd"
+  ) ?? "0x77dDCFDbD24a04BC150bc5d7EA636c0c990936bd";
 
 // The receiver of every bid fee: explicit SELLER_ADDRESS, else the address
 // derived from MONAD_DEPLOYER_PRIVATE_KEY.
 export function resolveSellerAddress(): string | null {
-  const explicit = process.env.SELLER_ADDRESS?.trim().replace(/^['"]|['"]$/g, "").trim();
-  if (explicit) return explicit;
-  const dep = process.env.MONAD_DEPLOYER_PRIVATE_KEY;
+  const explicit = stripEnvValue(process.env.SELLER_ADDRESS);
+  if (explicit) {
+    return normalizeAddress(explicit) ?? explicit;
+  }
+  const dep = stripEnvValue(process.env.MONAD_DEPLOYER_PRIVATE_KEY);
   if (dep) {
     try {
       return resolveAccount(dep).address;
@@ -69,19 +62,39 @@ export function resolveSellerAddress(): string | null {
   return null;
 }
 
-// Map a client-provided bidder address to its configured private key.
-function keyForBidder(bidderAddress: string): string | undefined {
-  const addr = bidderAddress.trim().toLowerCase();
-  if (addr === BIDDER1_ADDRESS.trim().toLowerCase()) {
-    return process.env.BIDDER1_PRIVATE_KEY;
+function lookupBidderKey(bidderAddress: string): {
+  key?: string;
+  expectedAddress?: string;
+  reason?: SimulationReason;
+} {
+  const normalized = normalizeAddress(bidderAddress);
+  if (!normalized) {
+    return { reason: "unknown_bidder_address" };
   }
-  if (addr === BIDDER2_ADDRESS.trim().toLowerCase()) {
-    return process.env.BIDDER2_PRIVATE_KEY;
+
+  const b1 = normalizeAddress(BIDDER1_ADDRESS);
+  const b2 = normalizeAddress(BIDDER2_ADDRESS);
+
+  if (b1 && normalized === b1) {
+    const key = stripEnvValue(process.env.BIDDER1_PRIVATE_KEY);
+    if (!key) return { reason: "missing_bidder_key", expectedAddress: b1 };
+    return { key, expectedAddress: b1 };
   }
-  return undefined;
+  if (b2 && normalized === b2) {
+    const key = stripEnvValue(process.env.BIDDER2_PRIVATE_KEY);
+    if (!key) return { reason: "missing_bidder_key", expectedAddress: b2 };
+    return { key, expectedAddress: b2 };
+  }
+  return { reason: "unknown_bidder_address" };
 }
 
-function simulated(from: string, to: string, amountMon: string): TransferResult {
+function simulated(
+  from: string,
+  to: string,
+  amountMon: string,
+  reason: SimulationReason
+): TransferResult {
+  console.warn(`[monad] bid transfer sandbox: ${reason}`);
   const seed = (from + to + amountMon).replace(/[^0-9a-fA-F]/g, "").slice(0, 16).padEnd(16, "0");
   return {
     txHash: `0xsim_${seed}`,
@@ -90,6 +103,7 @@ function simulated(from: string, to: string, amountMon: string): TransferResult 
     to,
     amountMon,
     mode: "simulated",
+    reason,
   };
 }
 
@@ -103,22 +117,36 @@ export async function transferBidFee({
   amountMon: string;
 }): Promise<TransferResult> {
   const seller = resolveSellerAddress();
-  const from = bidderAddress;
+  const from = normalizeAddress(bidderAddress) ?? bidderAddress.trim();
   const to = seller ?? "0x0000000000000000000000000000000000000000";
 
-  const pk = keyForBidder(bidderAddress);
-  if (!pk || !seller) {
-    // No matching key or no configured receiver -> simulate so the demo runs.
-    return simulated(from, to, amountMon);
+  if (!seller) {
+    return simulated(from, to, amountMon, "missing_seller");
+  }
+
+  const lookup = lookupBidderKey(bidderAddress);
+  if (!lookup.key) {
+    return simulated(from, to, amountMon, lookup.reason ?? "unknown_bidder_address");
+  }
+
+  let account;
+  try {
+    account = resolveAccount(lookup.key);
+  } catch (err) {
+    console.warn("[monad] bid transfer sandbox: invalid_bidder_key", err);
+    return simulated(from, to, amountMon, "invalid_bidder_key");
+  }
+
+  if (lookup.expectedAddress && account.address !== lookup.expectedAddress) {
+    console.warn("[monad] bid transfer: key_address_mismatch — key address differs from BIDDER*_ADDRESS");
   }
 
   try {
-    const account = resolveAccount(pk);
     const wallet = createWalletClient({
       account,
       chain: monadTestnet,
       // transport-level timeout so a stalled RPC never hangs the bid UX (~10s)
-      transport: http(RPC_URL, { timeout: 10_000 }),
+      transport: http(MONAD_RPC_URL, { timeout: 10_000 }),
     });
 
     // Real native MON transfer: bidder -> seller. viem manages the nonce.
@@ -129,14 +157,14 @@ export async function transferBidFee({
 
     return {
       txHash,
-      explorerUrl: `${EXPLORER.replace(/\/$/, "")}/tx/${txHash}`,
+      explorerUrl: `${MONAD_EXPLORER_URL.replace(/\/$/, "")}/tx/${txHash}`,
       from: account.address,
       to: seller,
       amountMon,
       mode: "live",
     };
   } catch (err) {
-    console.warn("[monad] live bid transfer failed, using simulated receipt:", err);
-    return simulated(from, to, amountMon);
+    console.warn("[monad] bid transfer sandbox: rpc_send_failed", err);
+    return simulated(from, to, amountMon, "rpc_send_failed");
   }
 }

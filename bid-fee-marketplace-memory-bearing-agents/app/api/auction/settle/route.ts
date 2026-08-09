@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
     explorer_url: string | null;
     network: string;
     mode: "live" | "simulated";
+    reason?: string;
   } | null = null;
   try {
     const payload = {
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
         explorer_url: r.explorerUrl,
         network: r.network,
         mode: r.mode,
+        reason: r.reason ?? null,
       },
     });
     receipt = {
@@ -118,6 +120,7 @@ export async function POST(req: NextRequest) {
       explorer_url: r.explorerUrl,
       network: r.network,
       mode: r.mode,
+      reason: r.reason,
     };
   } catch (e) {
     console.warn("[settle] monad anchor failed:", e);
