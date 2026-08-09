@@ -1,28 +1,13 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 // Server-side Supabase client for Server Components / Route Handlers.
-// Reads the anon key and forwards the user's session cookies (RLS applies).
+// Uses the public anon key for RLS-protected PUBLIC reads (lot grid, auction
+// state). User-scoped actions (place_bid, wallet) run through the browser
+// client, which carries the anonymous-auth session.
 export function createClient() {
-  const cookieStore = cookies();
-  return createServerClient(
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // called from a Server Component — safe to ignore
-          }
-        },
-      },
-    }
+    { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }
