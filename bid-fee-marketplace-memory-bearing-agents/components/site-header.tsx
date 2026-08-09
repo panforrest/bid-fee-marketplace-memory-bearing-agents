@@ -26,6 +26,14 @@ export function SiteHeader() {
             Wallet
           </Link>
           <a
+            href="https://memory-bid-booth.lovable.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg px-3 py-2 text-cyan/90 transition-colors hover:bg-cyan/10 hover:text-cyan"
+          >
+            Memory Bid Booth ↗
+          </a>
+          <a
             href="https://github.com/panforrest/bid-fee-marketplace-memory-bearing-agents"
             target="_blank"
             rel="noreferrer"
