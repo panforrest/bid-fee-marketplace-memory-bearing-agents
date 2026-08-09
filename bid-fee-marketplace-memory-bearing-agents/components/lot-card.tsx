@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Lot, formatCount } from "@/lib/types";
-import { formatUsd } from "@/lib/utils";
+import { formatTokens } from "@/lib/utils";
 import { Countdown } from "@/components/countdown";
 
 export function LotCard({ lot, serverNow }: { lot: Lot; serverNow?: string }) {
@@ -49,8 +49,8 @@ export function LotCard({ lot, serverNow }: { lot: Lot; serverNow?: string }) {
             {lot.flat_bid_units != null ? "Flat price · every bid" : "Price"}
           </p>
           {lot.flat_bid_units != null ? (
-            <p className="text-2xl font-semibold tabular-nums text-bone">
-              {formatUsd(lot.price_cents)}
+            <p className="text-lg font-semibold tabular-nums text-bone">
+              {formatTokens(lot.price_cents)}
             </p>
           ) : (
             <p className="text-sm font-medium text-bone/60">Opening bid sets price</p>

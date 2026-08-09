@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { AuctionState, formatBytes, formatCount } from "@/lib/types";
-import { formatUsd } from "@/lib/utils";
+import { formatTokens } from "@/lib/utils";
 import { Countdown } from "@/components/countdown";
 
 type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
@@ -32,7 +32,7 @@ export function LiveAuction({
   const [myBids, setMyBids] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
   const [ready, setReady] = useState(false);
-  const [openAmount, setOpenAmount] = useState<number>(100); // opening-bid entry (credits) — $1.00 default
+  const [openAmount, setOpenAmount] = useState<number>(1); // opening-bid entry in Servitor tokens (1 token = $1 = 100 credits)
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -122,7 +122,7 @@ export function LiveAuction({
         };
         if (row.ok) {
           setMyBids(row.bid_balance);
-          pushToast(`Bid placed — you're leading at ${formatUsd(row.price_cents)}`, "ok");
+          pushToast(`Bid placed — you're leading at ${formatTokens(row.price_cents)}`, "ok");
         } else {
           pushToast(ERROR_COPY[row.error ?? ""] ?? row.error ?? "Bid failed", "err");
           if (row.bid_balance != null) setMyBids(row.bid_balance);
@@ -150,8 +150,9 @@ export function LiveAuction({
   const priceSet = a.flat_bid_units != null;
   const lockedUnits = a.flat_bid_units ?? 0;
   const flatPrice = lockedUnits * a.increment_cents; // constant once the price is set
-  // amount the current click will spend: locked amount, or the opening bid entry.
-  const openUnits = Number.isFinite(openAmount) && openAmount > 0 ? Math.floor(openAmount) : 0;
+  // amount the current click will spend (in credits): locked amount, or the
+  // opening-bid entry. The entry is in Servitor tokens; 1 token = 100 credits.
+  const openUnits = Number.isFinite(openAmount) && openAmount > 0 ? Math.floor(openAmount * 100) : 0;
   const spendUnits = priceSet ? lockedUnits : openUnits;
   const outOfBids = myBids != null && spendUnits > 0 && myBids < spendUnits;
   const canOpen = !priceSet && openUnits >= 1 && !(myBids != null && myBids < openUnits);
@@ -191,8 +192,8 @@ export function LiveAuction({
                 {priceSet ? "Flat price · every bid" : "Awaiting opening bid"}
               </p>
               {priceSet ? (
-                <p className="text-6xl font-semibold tabular-nums text-bone">
-                  {formatUsd(flatPrice)}
+                <p className="text-4xl font-semibold tabular-nums text-bone">
+                  {formatTokens(flatPrice)}
                 </p>
               ) : (
                 <p className="mt-1 text-2xl font-semibold text-bone/70">
@@ -207,7 +208,7 @@ export function LiveAuction({
               </p>
               {priceSet && (
                 <p className="mt-0.5 text-[11px] text-gold/80">
-                  seller pot: {formatUsd(a.bid_count * flatPrice)}
+                  seller pot: {formatTokens(a.bid_count * flatPrice)}
                 </p>
               )}
             </div>
@@ -232,7 +233,7 @@ export function LiveAuction({
             /* OPENING BID: the first bidder names any amount and locks the price */
             <div className="mt-6">
               <label className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-bone/40">
-                Your opening bid (credits) — locks the flat price for everyone
+                Your opening bid (Servitor tokens) — locks the flat price for everyone
               </label>
               <div className="flex gap-3">
                 <div className="relative flex-1">
@@ -241,11 +242,11 @@ export function LiveAuction({
                     min={1}
                     step={1}
                     value={openAmount}
-                    onChange={(e) => setOpenAmount(parseInt(e.target.value, 10) || 0)}
+                    onChange={(e) => setOpenAmount(parseFloat(e.target.value) || 0)}
                     className="w-full rounded-xl border border-border bg-white/5 px-4 py-4 text-lg tabular-nums text-bone outline-none focus:border-cyan"
                   />
                   <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-bone/40">
-                    = {formatUsd(openUnits * a.increment_cents)}
+                    = {formatTokens(openUnits * a.increment_cents)}
                   </span>
                 </div>
                 <button
@@ -264,7 +265,7 @@ export function LiveAuction({
                     ? "Opening…"
                     : outOfBids
                     ? "Out of bids"
-                    : `Open the bidding · ${formatUsd(openUnits * a.increment_cents)}`}
+                    : `Open the bidding · ${formatTokens(openUnits * a.increment_cents)}`}
                 </button>
               </div>
             </div>
@@ -290,7 +291,7 @@ export function LiveAuction({
                 ? "Out of bids"
                 : placing
                 ? "Placing…"
-                : `Place bid · ${formatUsd(flatPrice)}`}
+                : `Place bid · ${formatTokens(flatPrice)}`}
             </button>
           )}
 
@@ -298,7 +299,7 @@ export function LiveAuction({
             <span>
               {myBids != null ? (
                 priceSet ? (
-                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {lockedUnits} credits ({formatUsd(flatPrice)}), same for everyone. Win if no one bids for 2 min.</>
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {formatTokens(flatPrice)}, flat, same for everyone. Win if no one bids for 2 min.</>
                 ) : (
                   <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 2 min wins.</>
                 )
@@ -359,7 +360,7 @@ export function LiveAuction({
                       <tr key={b.seq} className="border-t border-border/60">
                         <td className="px-4 py-2 font-mono text-bone/40">{b.seq}</td>
                         <td className="px-4 py-2 text-bone/80">{b.org_name}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-bone">{formatUsd(b.price_after)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-bone">{formatTokens(b.price_after)}</td>
                         <td className="px-4 py-2 text-right font-mono text-[11px] text-bone/40">
                           {new Date(b.placed_at).toLocaleTimeString()}
                         </td>
