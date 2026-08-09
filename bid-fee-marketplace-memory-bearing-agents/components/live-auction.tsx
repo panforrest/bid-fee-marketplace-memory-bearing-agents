@@ -19,6 +19,9 @@ const ERROR_COPY: Record<string, string> = {
   BAD_UNITS: "Invalid bid amount.",
 };
 
+// Flat bid size: every bid places exactly this many credits, same for everyone.
+const BID_UNITS = 1000;
+
 export function LiveAuction({
   auctionId,
   initialState,
@@ -146,8 +149,8 @@ export function LiveAuction({
   const inst = state.instance;
   const isLeader = myOrgId != null && a.leader_org_id === myOrgId;
   const isClosed = a.status !== "live";
-  const outOfBids = myBids != null && myBids < 1;
-  const nextPrice = a.price_cents + a.increment_cents;
+  const outOfBids = myBids != null && myBids < BID_UNITS;
+  const flatPrice = BID_UNITS * a.increment_cents; // constant — price never ascends
   const bidDisabled = !ready || placing || isClosed || isLeader || outOfBids;
 
   return (
@@ -180,16 +183,19 @@ export function LiveAuction({
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">
-                Current price
+                Flat price · every bid
               </p>
               <p className="text-6xl font-semibold tabular-nums text-bone">
-                {formatUsd(a.price_cents)}
+                {formatUsd(flatPrice)}
               </p>
               <p className="mt-1 text-xs text-bone/40">
                 {a.bid_count} bids · leader:{" "}
                 <span className={isLeader ? "text-cyan" : "text-bone/70"}>
                   {isLeader ? "You" : a.leader_name ?? "—"}
                 </span>
+              </p>
+              <p className="mt-0.5 text-[11px] text-gold/80">
+                seller pot: {formatUsd(a.bid_count * flatPrice)}
               </p>
             </div>
             <div className="text-right">
@@ -210,7 +216,7 @@ export function LiveAuction({
 
           {/* bid button */}
           <button
-            onClick={() => placeBid(1)}
+            onClick={() => placeBid(BID_UNITS)}
             disabled={bidDisabled}
             className={[
               "mt-6 w-full rounded-xl px-6 py-4 text-lg font-semibold transition-all",
@@ -229,13 +235,13 @@ export function LiveAuction({
               ? "Out of bids"
               : placing
               ? "Placing…"
-              : `Place bid → ${formatUsd(nextPrice)}`}
+              : `Place bid · ${formatUsd(flatPrice)}`}
           </button>
 
           <div className="mt-3 flex items-center justify-between text-xs text-bone/40">
             <span>
               {myBids != null ? (
-                <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid +{formatUsd(a.increment_cents)}. Win if no one bids for 15s.</>
+                <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {BID_UNITS} credits, flat, same for everyone. Win if no one bids for 15s.</>
               ) : (
                 "Connecting your guest wallet…"
               )}

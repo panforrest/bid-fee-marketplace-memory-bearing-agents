@@ -1,20 +1,70 @@
 -- ============================================================================
--- Memoria — Migration 0005: classic ascending auction
---   * Every bid raises the price by a fixed increment (1 credit each).
---   * NO reserve.
---   * NO credit-back (losing bids are not refunded).
+-- Memoria — Migration 0005: flat-fee, last-bidder-wins auction
+--   * Every bid is a FLAT 1000 credits — same for everyone, every time.
+--   * The price DOES NOT ascend. It stays constant (the flat bid amount).
+--   * All bid fees accrue to the SELLER, in real time, auditably.
+--   * NO reserve. NO credit-back (losing bids are not refunded).
 --   * Each bid resets the clock to 15s; when it expires, the LAST bidder wins.
--- Run AFTER 0001–0004 (Supabase SQL Editor -> paste -> Run).
+--   * Guest/seed wallets are topped up so a 1000-per-bid demo works.
+-- Run AFTER 0001–0004 (Supabase SQL Editor -> paste -> Run). ONE file only.
 -- ============================================================================
 
--- Drop reserves entirely.
+-- (1) New ledger kind for seller proceeds. Must be added in its own statement
+--     BEFORE anything uses it. (Postgres: an enum value can't be added and used
+--     in the same transaction; we only reference it at runtime, in place_bid.)
+alter type entry_kind add value if not exists 'seller_proceeds';
+
+-- (2) Drop reserves entirely.
 update auctions set reserve_cents = null;
 
+-- (3) Flat price: the item price is the flat bid amount (1000 * increment_cents)
+--     and never changes. Normalise every auction to that constant.
+update auctions set price_cents = 1000 * increment_cents;
+
+-- (4) Demo allowance: with a 1000-per-bid minimum, top up every existing wallet
+--     so guests and seeded orgs can place many bids.
+update wallets set bid_balance = greatest(bid_balance, 100000), updated_at = now();
+
 -- ---------------------------------------------------------------------------
--- place_bid(): fixed increment, ALWAYS reset the clock to extend_seconds (15s)
--- on every bid ("going once, going twice"). No reserve logic here.
+-- ensure_org(): auto-provision an anon guest with a big demo allowance so a
+-- 1000-per-bid flow has plenty of runway.
 -- ---------------------------------------------------------------------------
-create or replace function place_bid(p_auction_id uuid, p_units integer default 1)
+create or replace function ensure_org(p_display_name text default null)
+returns table (org_id uuid, bid_balance integer, credit_cents integer)
+language plpgsql security definer as $$
+declare
+  v_uid uuid := auth.uid();
+  v_org uuid;
+  v_name text;
+begin
+  if v_uid is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+
+  select om.org_id into v_org from org_members om where om.user_id = v_uid limit 1;
+
+  if v_org is null then
+    v_name := coalesce(nullif(p_display_name,''),
+                       'Bidder-' || substr(v_uid::text, 1, 4));
+    insert into organizations (legal_name, role, status)
+      values (v_name, 'buyer', 'verified')
+      returning id into v_org;
+    insert into org_members (org_id, user_id, is_admin) values (v_org, v_uid, true);
+    insert into wallets (org_id, bid_balance, credit_cents) values (v_org, 100000, 0);
+    insert into credit_entries (org_id, kind, bid_delta, reason)
+      values (v_org, 'subscription_grant', 100000, 'Welcome allowance (demo)');
+  end if;
+
+  return query
+    select w.org_id, w.bid_balance, w.credit_cents from wallets w where w.org_id = v_org;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- place_bid(): FLAT 1000 per bid. Price never ascends. Bidder pays the flat
+-- fee, the SELLER collects it (auditable), bidder becomes leader, clock resets
+-- to extend_seconds (15s). No reserve, no credit-back.
+-- ---------------------------------------------------------------------------
+create or replace function place_bid(p_auction_id uuid, p_units integer default 1000)
 returns table (
   ok boolean, price_cents integer, ends_at timestamptz,
   seq integer, bid_balance integer, error text
@@ -24,9 +74,9 @@ declare
   v_org uuid; v_uid uuid := auth.uid();
   v_auction auctions%rowtype;
   v_balance integer; v_seq integer; v_new_end timestamptz;
-  v_units integer := coalesce(p_units, 1);
+  v_units integer := coalesce(p_units, 1000);
 begin
-  if v_units < 1 or v_units > 1000 then
+  if v_units < 1 or v_units > 100000 then
     return query select false,0,null::timestamptz,0,0,'BAD_UNITS'; return;
   end if;
 
@@ -35,6 +85,7 @@ begin
     return query select false,0,null::timestamptz,0,0,'NO_ORG'; return;
   end if;
 
+  -- SERIALIZE concurrent bidders on this row lock.
   select * into v_auction from auctions where id = p_auction_id for update;
   if not found then
     return query select false,0,null::timestamptz,0,0,'NOT_FOUND'; return;
@@ -55,26 +106,33 @@ begin
     return query select false, v_auction.price_cents, v_auction.ends_at, 0,0,'INSUFFICIENT_BIDS'; return;
   end if;
 
-  -- ALWAYS reset the countdown to the 15s window on every bid.
+  -- Reset the 15s "going once" window on every bid. Price stays constant.
   v_new_end := now() + (v_auction.extend_seconds || ' seconds')::interval;
   v_seq := v_auction.bid_count + 1;
 
   update auctions set
-    price_cents   = price_cents + (v_units * increment_cents),
     bid_count     = v_seq,
     ends_at       = v_new_end,
     leader_org_id = v_org
-  where id = p_auction_id
-  returning auctions.price_cents into v_auction.price_cents;
+  where id = p_auction_id;
 
+  -- Bidder: append the public bid record + spend the flat fee.
   insert into bids (auction_id, org_id, user_id, seq, price_after, ends_at_after)
     values (p_auction_id, v_org, v_uid, v_seq, v_auction.price_cents, v_new_end);
-
   insert into credit_entries (org_id, kind, bid_delta, auction_id, reason)
     values (v_org, 'bid_spend', -v_units, p_auction_id, 'bid #' || v_seq);
-
   update wallets set bid_balance = bid_balance - v_units, updated_at = now()
     where org_id = v_org returning bid_balance into v_balance;
+
+  -- Seller: collects the flat bid fee in real time, auditably. Ensure a wallet
+  -- exists for the seller (house seller has none until now).
+  insert into wallets (org_id, bid_balance, credit_cents)
+    values (v_auction.seller_org_id, v_units, 0)
+    on conflict (org_id) do update
+      set bid_balance = wallets.bid_balance + v_units, updated_at = now();
+  insert into credit_entries (org_id, kind, bid_delta, auction_id, reason)
+    values (v_auction.seller_org_id, 'seller_proceeds', v_units, p_auction_id,
+            'bid #' || v_seq || ' proceeds to seller');
 
   insert into auction_events (auction_id, kind, payload)
     values (p_auction_id, 'bid', jsonb_build_object(
