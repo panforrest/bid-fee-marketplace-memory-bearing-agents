@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0a1a2f;
+  color: #f2efe6;
+}
+
+/* Tabular numerals for prices + countdowns so digits never jump */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(242, 239, 230, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 24px rgba(31, 200, 222, 0.55);
+}
