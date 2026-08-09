@@ -141,7 +141,9 @@ export async function transferBidFee({
   }
 
   if (lookup.expectedAddress && account.address !== lookup.expectedAddress) {
-    console.warn("[monad] bid transfer: key_address_mismatch — key address differs from BIDDER*_ADDRESS");
+    const reasonDetail = `key derives to ${account.address}, expected ${lookup.expectedAddress}`;
+    console.warn("[monad] bid transfer sandbox: key_address_mismatch", reasonDetail);
+    return simulated(from, to, amountMon, "key_address_mismatch", reasonDetail);
   }
 
   try {
