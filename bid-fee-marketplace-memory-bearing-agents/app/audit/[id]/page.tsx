@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SiteHeader } from "@/components/site-header";
 import { MonadAnchor, AnchorReceipt } from "@/components/monad-anchor";
 import { AuctionState } from "@/lib/types";
-import { formatUsd } from "@/lib/utils";
+import { formatTokens } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +63,19 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
           <span>{inst.emoji}</span> Public audit trail
         </h1>
         <p className="mt-1 text-sm text-bone/50">
-          {inst.title} — every bid is append-only and publicly verifiable. Current price{" "}
-          <span className="text-bone/80">{formatUsd(a.price_cents)}</span> · {a.bid_count} bids ·{" "}
-          <span className="uppercase">{a.status}</span>
+          {inst.title} — every bid is append-only and publicly verifiable. Flat price{" "}
+          <span className="text-bone/80">
+            {a.flat_bid_units != null ? formatTokens(a.price_cents) : "not set yet"}
+          </span>{" "}
+          · {a.bid_count} bids · <span className="uppercase">{a.status}</span>
         </p>
+
+        {/* settled winner */}
+        {a.status === "settled" && a.winner_org_id && (
+          <div className="mt-4 rounded-xl border border-gold/40 bg-gold/[0.06] px-4 py-3 text-sm font-semibold text-gold">
+            🏆 Winner: {a.leader_name ?? "—"} · {formatTokens(a.price_cents)}
+          </div>
+        )}
 
         {/* on-chain anchoring */}
         <div className="mt-6">
@@ -95,7 +104,7 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
                   <tr key={b.seq} className="border-t border-border/60">
                     <td className="px-4 py-2 font-mono text-bone/40">{b.seq}</td>
                     <td className="px-4 py-2 text-bone/80">{b.org_name}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-bone">{formatUsd(b.price_after)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-bone">{formatTokens(b.price_after)}</td>
                     <td className="px-4 py-2 text-right font-mono text-[11px] text-bone/40">
                       {new Date(b.placed_at).toLocaleTimeString()}
                     </td>

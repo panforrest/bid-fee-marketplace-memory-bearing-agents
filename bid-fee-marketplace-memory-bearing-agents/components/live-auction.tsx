@@ -9,6 +9,17 @@ import { Countdown } from "@/components/countdown";
 
 type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
 
+interface SettleResult {
+  status: string;
+  price_cents: number;
+  winner: { org_id: string; name: string | null } | null;
+  receipt: {
+    tx_hash: string;
+    explorer_url: string | null;
+    mode: "live" | "simulated";
+  };
+}
+
 const ERROR_COPY: Record<string, string> = {
   AUCTION_CLOSED: "This auction has closed.",
   INSUFFICIENT_BIDS: "You're out of bids. Top up in your wallet.",
@@ -33,6 +44,8 @@ export function LiveAuction({
   const [placing, setPlacing] = useState(false);
   const [ready, setReady] = useState(false);
   const [openAmount, setOpenAmount] = useState<number>(1); // opening-bid entry in Servitor tokens (1 token = $1 = 100 credits)
+  const [settling, setSettling] = useState(false);
+  const [settleResult, setSettleResult] = useState<SettleResult | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -134,6 +147,35 @@ export function LiveAuction({
     }
   }, [supabase, auctionId, pushToast, refetch]);
 
+  const endAuctionNow = useCallback(async () => {
+    if (settling) return;
+    setSettling(true);
+    try {
+      const res = await fetch("/api/auction/settle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ auctionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        pushToast(json.error || "Settle failed", "err");
+      } else {
+        setSettleResult(json as SettleResult);
+        pushToast(
+          (json as SettleResult).winner
+            ? "Auction settled + anchored on Monad ✓"
+            : "Auction closed with no winner",
+          "ok"
+        );
+      }
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Settle failed", "err");
+    } finally {
+      setSettling(false);
+      refetch();
+    }
+  }, [settling, auctionId, pushToast, refetch]);
+
   if (!state) {
     return (
       <div className="container py-24 text-center text-bone/50">
@@ -158,6 +200,12 @@ export function LiveAuction({
   const canOpen = !priceSet && openUnits >= 1 && !(myBids != null && myBids < openUnits);
   const bidDisabled =
     !ready || placing || isClosed || isLeader || outOfBids || (!priceSet && !canOpen);
+
+  // Winner/settlement view: prefer the fresh settle response, fall back to state.
+  const settled = isClosed || settleResult != null;
+  const hasWinner = settleResult ? settleResult.winner != null : a.winner_org_id != null;
+  const winnerName = settleResult?.winner?.name ?? a.leader_name ?? "—";
+  const winnerCents = settleResult?.price_cents ?? a.price_cents;
 
   return (
     <div className="container grid grid-cols-1 gap-6 py-8 lg:grid-cols-3">
@@ -312,14 +360,79 @@ export function LiveAuction({
             )}
           </div>
 
-          {isLeader && !isClosed && (
+          {isLeader && !isClosed && !settled && (
             <div className="mt-4 rounded-lg border border-cyan/30 bg-cyan/5 px-4 py-2 text-center text-sm text-cyan">
               🏆 You&apos;re the highest bidder. Sit tight — you can&apos;t bid against yourself.
             </div>
           )}
-          {isClosed && (
-            <div className="mt-4 rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 text-center text-sm text-gold">
-              Auction {a.status}. {a.winner_org_id ? "The last bidder won." : "No bids — closed with no winner."}
+
+          {/* DEMO CONTROL: force-settle to the last bidder + anchor on Monad */}
+          {!settled && (
+            <div className="mt-4">
+              <button
+                onClick={endAuctionNow}
+                disabled={settling || a.bid_count === 0}
+                className={[
+                  "w-full rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
+                  settling || a.bid_count === 0
+                    ? "cursor-not-allowed border-border bg-white/5 text-bone/40"
+                    : "border-gold/40 bg-gold/10 text-gold hover:bg-gold/20",
+                ].join(" ")}
+              >
+                {settling
+                  ? "Settling + anchoring on Monad…"
+                  : a.bid_count === 0
+                  ? "End auction now (demo) — needs at least one bid"
+                  : "⚡ End auction now (demo)"}
+              </button>
+              <p className="mt-1 text-center text-[11px] text-bone/40">
+                Demo control · ends the clock, settles to the last bidder, and anchors the result on Monad.
+              </p>
+            </div>
+          )}
+
+          {/* WINNER + MONAD RECEIPT */}
+          {settled && (
+            <div className="mt-4 rounded-xl border border-gold/40 bg-gold/[0.06] px-4 py-4 text-center">
+              {hasWinner ? (
+                <p className="text-lg font-semibold text-gold">
+                  🏆 Winner: {winnerName} · {formatTokens(winnerCents)}
+                </p>
+              ) : (
+                <p className="text-lg font-semibold text-gold">
+                  Auction closed — no bids, no winner.
+                </p>
+              )}
+              {settleResult ? (
+                <p className="mt-2 text-sm text-cyan">
+                  Monad transaction completed ✓{" "}
+                  <span className="text-[11px] uppercase tracking-wide text-bone/40">
+                    ({settleResult.receipt.mode === "live" ? "On-chain" : "Sandbox"})
+                  </span>
+                  <br />
+                  {settleResult.receipt.explorer_url ? (
+                    <a
+                      href={settleResult.receipt.explorer_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-[11px] text-cyan hover:underline"
+                    >
+                      tx {settleResult.receipt.tx_hash} ↗
+                    </a>
+                  ) : (
+                    <span className="font-mono text-[11px] text-bone/50">
+                      tx {settleResult.receipt.tx_hash}
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <Link
+                  href={`/audit/${auctionId}`}
+                  className="mt-2 inline-block text-sm text-cyan hover:underline"
+                >
+                  View Monad receipt on the audit trail →
+                </Link>
+              )}
             </div>
           )}
         </div>
