@@ -46,11 +46,15 @@ export function LotCard({ lot, serverNow }: { lot: Lot; serverNow?: string }) {
       <div className="mt-auto flex items-end justify-between border-t border-border pt-4">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-wider text-bone/40">
-            Current price
+            {lot.flat_bid_units != null ? "Flat price · every bid" : "Price"}
           </p>
-          <p className="text-2xl font-semibold tabular-nums text-bone">
-            {formatUsd(lot.price_cents)}
-          </p>
+          {lot.flat_bid_units != null ? (
+            <p className="text-2xl font-semibold tabular-nums text-bone">
+              {formatUsd(lot.price_cents)}
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-bone/60">Opening bid sets price</p>
+          )}
         </div>
         <div className="text-right">
           <p className="font-mono text-[11px] uppercase tracking-wider text-bone/40">

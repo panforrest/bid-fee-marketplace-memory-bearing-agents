@@ -18,10 +18,6 @@ const ERROR_COPY: Record<string, string> = {
   NOT_FOUND: "Auction not found.",
   BAD_UNITS: "Invalid bid amount.",
 };
-
-// Flat bid size: every bid places exactly this many credits, same for everyone.
-const BID_UNITS = 1000;
-
 export function LiveAuction({
   auctionId,
   initialState,
@@ -36,6 +32,7 @@ export function LiveAuction({
   const [myBids, setMyBids] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
   const [ready, setReady] = useState(false);
+  const [openAmount, setOpenAmount] = useState<number>(1000); // opening-bid entry (credits)
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -149,9 +146,17 @@ export function LiveAuction({
   const inst = state.instance;
   const isLeader = myOrgId != null && a.leader_org_id === myOrgId;
   const isClosed = a.status !== "live";
-  const outOfBids = myBids != null && myBids < BID_UNITS;
-  const flatPrice = BID_UNITS * a.increment_cents; // constant — price never ascends
-  const bidDisabled = !ready || placing || isClosed || isLeader || outOfBids;
+  // Opening bid sets the flat amount; after that it's locked for everyone.
+  const priceSet = a.flat_bid_units != null;
+  const lockedUnits = a.flat_bid_units ?? 0;
+  const flatPrice = lockedUnits * a.increment_cents; // constant once the price is set
+  // amount the current click will spend: locked amount, or the opening bid entry.
+  const openUnits = Number.isFinite(openAmount) && openAmount > 0 ? Math.floor(openAmount) : 0;
+  const spendUnits = priceSet ? lockedUnits : openUnits;
+  const outOfBids = myBids != null && spendUnits > 0 && myBids < spendUnits;
+  const canOpen = !priceSet && openUnits >= 1 && !(myBids != null && myBids < openUnits);
+  const bidDisabled =
+    !ready || placing || isClosed || isLeader || outOfBids || (!priceSet && !canOpen);
 
   return (
     <div className="container grid grid-cols-1 gap-6 py-8 lg:grid-cols-3">
@@ -183,20 +188,28 @@ export function LiveAuction({
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">
-                Flat price · every bid
+                {priceSet ? "Flat price · every bid" : "Awaiting opening bid"}
               </p>
-              <p className="text-6xl font-semibold tabular-nums text-bone">
-                {formatUsd(flatPrice)}
-              </p>
+              {priceSet ? (
+                <p className="text-6xl font-semibold tabular-nums text-bone">
+                  {formatUsd(flatPrice)}
+                </p>
+              ) : (
+                <p className="mt-1 text-2xl font-semibold text-bone/70">
+                  Opening bid sets the price
+                </p>
+              )}
               <p className="mt-1 text-xs text-bone/40">
                 {a.bid_count} bids · leader:{" "}
                 <span className={isLeader ? "text-cyan" : "text-bone/70"}>
                   {isLeader ? "You" : a.leader_name ?? "—"}
                 </span>
               </p>
-              <p className="mt-0.5 text-[11px] text-gold/80">
-                seller pot: {formatUsd(a.bid_count * flatPrice)}
-              </p>
+              {priceSet && (
+                <p className="mt-0.5 text-[11px] text-gold/80">
+                  seller pot: {formatUsd(a.bid_count * flatPrice)}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">
@@ -209,39 +222,86 @@ export function LiveAuction({
                 className="mt-1 text-base"
               />
               {!isClosed && a.bid_count > 0 && (
-                <p className="mt-2 text-[11px] text-gold">going once — 15s resets on each bid</p>
+                <p className="mt-2 text-[11px] text-gold">going once — 30 min resets on each bid</p>
               )}
             </div>
           </div>
 
-          {/* bid button */}
-          <button
-            onClick={() => placeBid(BID_UNITS)}
-            disabled={bidDisabled}
-            className={[
-              "mt-6 w-full rounded-xl px-6 py-4 text-lg font-semibold transition-all",
-              bidDisabled
-                ? "cursor-not-allowed bg-white/5 text-bone/40"
-                : "bg-cyan text-ink hover:bg-cyan-glow hover:shadow-[0_0_30px_rgba(31,200,222,0.4)]",
-            ].join(" ")}
-          >
-            {!ready
-              ? "Connecting…"
-              : isClosed
-              ? "Auction closed"
-              : isLeader
-              ? "You're the highest bidder"
-              : outOfBids
-              ? "Out of bids"
-              : placing
-              ? "Placing…"
-              : `Place bid · ${formatUsd(flatPrice)}`}
-          </button>
+          {/* bid controls */}
+          {!priceSet && !isClosed ? (
+            /* OPENING BID: the first bidder names any amount and locks the price */
+            <div className="mt-6">
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-widest text-bone/40">
+                Your opening bid (credits) — locks the flat price for everyone
+              </label>
+              <div className="flex gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={openAmount}
+                    onChange={(e) => setOpenAmount(parseInt(e.target.value, 10) || 0)}
+                    className="w-full rounded-xl border border-border bg-white/5 px-4 py-4 text-lg tabular-nums text-bone outline-none focus:border-cyan"
+                  />
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-bone/40">
+                    = {formatUsd(openUnits * a.increment_cents)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => placeBid(openUnits)}
+                  disabled={bidDisabled}
+                  className={[
+                    "shrink-0 rounded-xl px-6 py-4 text-lg font-semibold transition-all",
+                    bidDisabled
+                      ? "cursor-not-allowed bg-white/5 text-bone/40"
+                      : "bg-cyan text-ink hover:bg-cyan-glow hover:shadow-[0_0_30px_rgba(31,200,222,0.4)]",
+                  ].join(" ")}
+                >
+                  {!ready
+                    ? "Connecting…"
+                    : placing
+                    ? "Opening…"
+                    : outOfBids
+                    ? "Out of bids"
+                    : `Open the bidding · ${formatUsd(openUnits * a.increment_cents)}`}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* LOCKED: every bid is the same amount the opener set */
+            <button
+              onClick={() => placeBid(lockedUnits)}
+              disabled={bidDisabled}
+              className={[
+                "mt-6 w-full rounded-xl px-6 py-4 text-lg font-semibold transition-all",
+                bidDisabled
+                  ? "cursor-not-allowed bg-white/5 text-bone/40"
+                  : "bg-cyan text-ink hover:bg-cyan-glow hover:shadow-[0_0_30px_rgba(31,200,222,0.4)]",
+              ].join(" ")}
+            >
+              {!ready
+                ? "Connecting…"
+                : isClosed
+                ? "Auction closed"
+                : isLeader
+                ? "You're the highest bidder"
+                : outOfBids
+                ? "Out of bids"
+                : placing
+                ? "Placing…"
+                : `Place bid · ${formatUsd(flatPrice)}`}
+            </button>
+          )}
 
           <div className="mt-3 flex items-center justify-between text-xs text-bone/40">
             <span>
               {myBids != null ? (
-                <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {BID_UNITS} credits, flat, same for everyone. Win if no one bids for 15s.</>
+                priceSet ? (
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {lockedUnits} credits ({formatUsd(flatPrice)}), same for everyone. Win if no one bids for 30 min.</>
+                ) : (
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 30 min wins.</>
+                )
               ) : (
                 "Connecting your guest wallet…"
               )}

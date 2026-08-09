@@ -20,6 +20,7 @@ export interface Lot {
   bid_count: number;
   ends_at: string;
   reserve_cents: number | null;
+  flat_bid_units: number | null;
   instance: AgentInstance;
 }
 
@@ -36,6 +37,7 @@ export interface AuctionState {
     increment_cents: number;
     bid_face_cents: number;
     reserve_cents: number | null;
+    flat_bid_units: number | null;
     leader_org_id: string | null;
     leader_name: string | null;
     seller_name: string | null;

@@ -15,7 +15,7 @@ async function getLots(): Promise<{ lots: Lot[]; error: string | null }> {
   const { data, error } = await supabase
     .from("auctions")
     .select(
-      "id, status, price_cents, bid_count, ends_at, reserve_cents, agent_instances(id, title, summary, emoji, base_model, framework, memory_backend, memory_record_ct, memory_bytes, benchmark_suite, benchmark_score, memory_highlights)"
+      "id, status, price_cents, bid_count, ends_at, reserve_cents, flat_bid_units, increment_cents, agent_instances(id, title, summary, emoji, base_model, framework, memory_backend, memory_record_ct, memory_bytes, benchmark_suite, benchmark_score, memory_highlights)"
     )
     .eq("status", "live")
     .order("ends_at", { ascending: true });
@@ -29,6 +29,7 @@ async function getLots(): Promise<{ lots: Lot[]; error: string | null }> {
     bid_count: row.bid_count,
     ends_at: row.ends_at,
     reserve_cents: row.reserve_cents,
+    flat_bid_units: row.flat_bid_units,
     instance: Array.isArray(row.agent_instances)
       ? row.agent_instances[0]
       : row.agent_instances,
@@ -82,7 +83,7 @@ export default async function Home() {
           <span>
             <b className="text-bone/80">House accounts cannot bid</b> — enforced by a database constraint, not a policy.
           </span>
-          <span className="hidden sm:inline">Every bid is publicly auditable. After 15 seconds with no new bid, the last bidder wins.</span>
+          <span className="hidden sm:inline">Every bid is publicly auditable. After 30 minutes with no new bid, the last bidder wins.</span>
         </div>
       </div>
 
@@ -124,7 +125,7 @@ export default async function Home() {
       <footer className="border-t border-border py-10">
         <div className="container flex flex-col items-center gap-2 text-center text-xs text-bone/40">
           <p>Memoria · built for the Raingentic Commerce Hackathon NYC</p>
-          <p>Ascending auction · 15-second going-once timer · publicly auditable · B2B only</p>
+          <p>Flat-fee auction · 30-minute going-once timer · publicly auditable · B2B only</p>
         </div>
       </footer>
     </>
