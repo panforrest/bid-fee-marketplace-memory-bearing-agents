@@ -7,7 +7,8 @@ import {
   keccak256,
   stringToHex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, mnemonicToAccount } from "viem/accounts";
+import type { Account } from "viem";
 
 // ============================================================================
 // Monad — on-chain audit receipts (BOUNTY).
@@ -58,6 +59,23 @@ export function monadIsLive(): boolean {
   return Boolean(process.env.MONAD_DEPLOYER_PRIVATE_KEY);
 }
 
+// Accept either a raw private key (64 hex, with/without 0x) OR a seed phrase.
+// Strips stray quotes/whitespace that sneak in from copy-paste.
+function resolveAccount(raw: string): Account {
+  const val = raw.trim().replace(/^['"]|['"]$/g, "").trim();
+  const hex = val.startsWith("0x") ? val.slice(2) : val;
+  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
+    return privateKeyToAccount(`0x${hex}` as `0x${string}`);
+  }
+  // looks like a mnemonic (space-separated words)
+  if (val.split(/\s+/).length >= 12) {
+    return mnemonicToAccount(val);
+  }
+  throw new Error(
+    "MONAD_DEPLOYER_PRIVATE_KEY is neither a 64-char hex private key nor a 12+ word seed phrase"
+  );
+}
+
 export async function anchorReceipt(
   payload: Record<string, unknown>
 ): Promise<AnchorResult> {
@@ -75,9 +93,7 @@ export async function anchorReceipt(
   }
 
   try {
-    const account = privateKeyToAccount(
-      (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`
-    );
+    const account = resolveAccount(pk);
     const wallet = createWalletClient({
       account,
       chain: monadTestnet,
