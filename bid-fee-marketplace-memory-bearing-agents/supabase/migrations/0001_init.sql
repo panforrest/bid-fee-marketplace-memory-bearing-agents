@@ -208,6 +208,9 @@ returns table (
   ok boolean, price_cents integer, ends_at timestamptz,
   seq integer, bid_balance integer, error text
 ) language plpgsql security definer as $$
+-- OUT params (price_cents, bid_balance, ends_at, seq) share names with table
+-- columns; resolve any collision to the COLUMN inside DML statements.
+#variable_conflict use_column
 declare
   v_org uuid; v_uid uuid := auth.uid();
   v_auction auctions%rowtype;
