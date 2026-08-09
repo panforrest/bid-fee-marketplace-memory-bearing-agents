@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       network: receipt.network,
       mode: receipt.mode,
       reason: receipt.reason ?? null,
+      reason_detail: receipt.reasonDetail ?? null,
     },
   });
 

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AuctionState, formatBytes, formatCount } from "@/lib/types";
 import { formatTokens } from "@/lib/utils";
 import { resolveBidderIdentity, shortWallet } from "@/lib/bidder";
-import { humanizeSandboxReason } from "@/lib/monad/reasons";
+import { formatSandboxReason } from "@/lib/monad/reasons";
 import { Countdown } from "@/components/countdown";
 
 type Toast = { id: number; msg: string; kind: "ok" | "err" | "info" };
@@ -29,6 +29,7 @@ interface SettleResult {
     explorer_url: string | null;
     mode: "live" | "simulated";
     reason?: string;
+    reasonDetail?: string;
   } | null;
 }
 
@@ -40,6 +41,7 @@ interface TransferReceipt {
   amountMon: string;
   mode: "live" | "simulated";
   reason?: string;
+  reasonDetail?: string;
 }
 
 interface BalanceEntry {
@@ -459,7 +461,7 @@ export function LiveAuction({
               </span>
               {lastTransfer.mode === "simulated" && lastTransfer.reason && (
                 <span className="block text-[10px] text-bone/45">
-                  Sandbox — {humanizeSandboxReason(lastTransfer.reason)}
+                  Sandbox — {formatSandboxReason(lastTransfer.reason, lastTransfer.reasonDetail)}
                 </span>
               )}{" "}
               {lastTransfer.explorerUrl ? (
@@ -541,7 +543,10 @@ export function LiveAuction({
                       </span>
                       {settleResult.receipt.mode === "simulated" && settleResult.receipt.reason && (
                         <span className="block text-[10px] text-bone/45">
-                          Sandbox — {humanizeSandboxReason(settleResult.receipt.reason)}
+                          Sandbox — {formatSandboxReason(
+                            settleResult.receipt.reason,
+                            settleResult.receipt.reasonDetail
+                          )}
                         </span>
                       )}
                       <br />

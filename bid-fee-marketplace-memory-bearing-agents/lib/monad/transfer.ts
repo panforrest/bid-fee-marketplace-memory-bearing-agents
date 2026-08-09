@@ -1,6 +1,6 @@
 import "server-only";
 import { createWalletClient, http, parseEther } from "viem";
-import type { SimulationReason } from "@/lib/monad/reasons";
+import { sanitizeRpcError, type SimulationReason } from "@/lib/monad/reasons";
 import {
   MONAD_EXPLORER_URL,
   MONAD_RPC_URL,
@@ -33,6 +33,7 @@ export interface TransferResult {
   amountMon: string;
   mode: ChainMode;
   reason?: SimulationReason;
+  reasonDetail?: string;
 }
 
 export const BIDDER1_ADDRESS =
@@ -92,9 +93,10 @@ function simulated(
   from: string,
   to: string,
   amountMon: string,
-  reason: SimulationReason
+  reason: SimulationReason,
+  reasonDetail?: string
 ): TransferResult {
-  console.warn(`[monad] bid transfer sandbox: ${reason}`);
+  console.warn(`[monad] bid transfer sandbox: ${reason}`, reasonDetail ?? "");
   const seed = (from + to + amountMon).replace(/[^0-9a-fA-F]/g, "").slice(0, 16).padEnd(16, "0");
   return {
     txHash: `0xsim_${seed}`,
@@ -104,6 +106,7 @@ function simulated(
     amountMon,
     mode: "simulated",
     reason,
+    reasonDetail,
   };
 }
 
@@ -164,7 +167,8 @@ export async function transferBidFee({
       mode: "live",
     };
   } catch (err) {
-    console.warn("[monad] bid transfer sandbox: rpc_send_failed", err);
-    return simulated(from, to, amountMon, "rpc_send_failed");
+    const reasonDetail = sanitizeRpcError(err);
+    console.warn("[monad] bid transfer sandbox: rpc_send_failed", reasonDetail);
+    return simulated(from, to, amountMon, "rpc_send_failed", reasonDetail);
   }
 }

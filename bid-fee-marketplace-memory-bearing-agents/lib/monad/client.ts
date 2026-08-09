@@ -10,7 +10,7 @@ import {
 } from "viem";
 import { privateKeyToAccount, mnemonicToAccount } from "viem/accounts";
 import type { Account } from "viem";
-import type { SimulationReason } from "@/lib/monad/reasons";
+import { sanitizeRpcError, type SimulationReason } from "@/lib/monad/reasons";
 
 // ============================================================================
 // Monad — on-chain audit receipts (BOUNTY).
@@ -33,6 +33,7 @@ export interface AnchorResult {
   network: string;
   mode: ChainMode;
   reason?: SimulationReason;
+  reasonDetail?: string;
 }
 
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_MONAD_CHAIN_ID || 10143);
@@ -110,8 +111,12 @@ export function resolveAccount(raw: string): Account {
   );
 }
 
-function simulatedAnchor(digest: string, reason: SimulationReason): AnchorResult {
-  console.warn(`[monad] anchor sandbox: ${reason}`);
+function simulatedAnchor(
+  digest: string,
+  reason: SimulationReason,
+  reasonDetail?: string
+): AnchorResult {
+  console.warn(`[monad] anchor sandbox: ${reason}`, reasonDetail ?? "");
   return {
     txHash: `0xsim_${digest.slice(2, 18)}`,
     digest,
@@ -119,6 +124,7 @@ function simulatedAnchor(digest: string, reason: SimulationReason): AnchorResult
     network: "monad-testnet",
     mode: "simulated",
     reason,
+    reasonDetail,
   };
 }
 
@@ -162,8 +168,9 @@ export async function anchorReceipt(
       mode: "live",
     };
   } catch (err) {
-    console.warn("[monad] anchor sandbox: rpc_send_failed", err);
-    return simulatedAnchor(digest, "rpc_send_failed");
+    const reasonDetail = sanitizeRpcError(err);
+    console.warn("[monad] anchor sandbox: rpc_send_failed", reasonDetail);
+    return simulatedAnchor(digest, "rpc_send_failed", reasonDetail);
   }
 }
 

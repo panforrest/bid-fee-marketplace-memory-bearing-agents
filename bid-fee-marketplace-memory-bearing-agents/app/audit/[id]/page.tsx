@@ -38,6 +38,7 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
       network: p.network ?? "monad-testnet",
       mode: (p.mode as "live" | "simulated") ?? "simulated",
       reason: p.reason ?? null,
+      reasonDetail: p.reason_detail ?? null,
       at: e.at as string,
     };
   });
