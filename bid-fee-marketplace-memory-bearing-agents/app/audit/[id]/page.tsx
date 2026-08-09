@@ -22,6 +22,13 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
     .eq("kind", "monad_anchored")
     .order("at", { ascending: false });
 
+  const { data: payments } = await admin
+    .from("payments")
+    .select("org_id, amount_cents, usdc_amount, network, rain_reference, rain_mode, status, created_at")
+    .eq("auction_id", params.id)
+    .eq("kind", "lot_settlement")
+    .order("created_at", { ascending: false });
+
   const receipts: AnchorReceipt[] = (events ?? []).map((e) => {
     const p = (e.payload ?? {}) as Record<string, string>;
     return {
@@ -74,6 +81,46 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
         {a.status === "settled" && a.winner_org_id && (
           <div className="mt-4 rounded-xl border border-gold/40 bg-gold/[0.06] px-4 py-3 text-sm font-semibold text-gold">
             🏆 Winner: {a.leader_name ?? "—"} · {formatTokens(a.price_cents)}
+          </div>
+        )}
+
+        {/* Rain USDC settlement — winner pays seller */}
+        {payments && payments.length > 0 && (
+          <div className="mt-6 rounded-2xl border border-gold/25 bg-gold/[0.04] p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-widest text-gold/70">
+                  Stablecoin settlement
+                </p>
+                <h3 className="mt-0.5 text-lg font-semibold">Winner paid the seller in USDC via Rain</h3>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              {payments.map((p, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg border border-border bg-card/60 p-3 font-mono text-[11px]"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-bone/50">winner → seller · {p.network}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        p.rain_mode === "live" ? "bg-gold/20 text-gold" : "bg-white/10 text-bone/60"
+                      }`}
+                    >
+                      {p.rain_mode === "live" ? "Live" : "Sandbox"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-bone/80">
+                    ${(p.amount_cents / 100).toFixed(2)} USDC ·{" "}
+                    <span className="uppercase text-cyan">{p.status}</span>
+                  </p>
+                  <p className="mt-0.5 truncate text-bone/50" title={p.rain_reference}>
+                    ref {p.rain_reference}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
