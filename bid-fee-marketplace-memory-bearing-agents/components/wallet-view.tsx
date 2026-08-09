@@ -55,11 +55,10 @@ export function WalletView() {
   }
 
   const bidBalance = data?.wallet?.bid_balance ?? 0;
-  const creditCents = data?.wallet?.credit_cents ?? 0;
   const entries = data?.entries ?? [];
-  const creditedBack = entries
-    .filter((e) => e.kind === "loser_creditback")
-    .reduce((s, e) => s + e.cents_delta, 0);
+  const bidsSpent = entries
+    .filter((e) => e.kind === "bid_spend")
+    .reduce((s, e) => s + Math.abs(e.bid_delta), 0);
 
   return (
     <div className="container max-w-4xl py-8">
@@ -72,33 +71,22 @@ export function WalletView() {
       </p>
 
       {/* stat cards */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-5">
           <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">Bid balance</p>
           <p className="mt-1 text-4xl font-semibold tabular-nums text-cyan">{formatCount(bidBalance)}</p>
           <p className="mt-1 text-xs text-bone/40">bids available</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">Store credit</p>
-          <p className="mt-1 text-4xl font-semibold tabular-nums text-gold">{formatUsd(creditCents)}</p>
-          <p className="mt-1 text-xs text-bone/40">usable on any lot at par</p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">Credited back</p>
-          <p className="mt-1 text-4xl font-semibold tabular-nums text-bone/80">{formatUsd(creditedBack)}</p>
-          <p className="mt-1 text-xs text-bone/40">from lost auctions</p>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-bone/40">Bids spent</p>
+          <p className="mt-1 text-4xl font-semibold tabular-nums text-bone/80">{formatCount(bidsSpent)}</p>
+          <p className="mt-1 text-xs text-bone/40">across all lots</p>
         </div>
       </div>
 
       {/* fund allowance in USDC via Rain */}
       <div className="mt-4">
         <RainTopup orgId={data?.org_id ?? null} onFunded={load} />
-      </div>
-
-      {/* credit-back explainer */}
-      <div className="mt-4 rounded-xl border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-gold/90">
-        <b>Nobody leaves with nothing.</b> This isn&apos;t a penny auction — every bid you spend on a
-        lot you don&apos;t win converts to store credit <b>at par</b>, usable against any listing.
       </div>
 
       {/* ledger */}

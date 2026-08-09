@@ -51,11 +51,6 @@ export function LotCard({ lot, serverNow }: { lot: Lot; serverNow?: string }) {
           <p className="text-2xl font-semibold tabular-nums text-bone">
             {formatUsd(lot.price_cents)}
           </p>
-          {lot.reserve_cents != null && (
-            <p className={`mt-0.5 text-[11px] ${lot.price_cents >= lot.reserve_cents ? "text-cyan" : "text-gold"}`}>
-              Reserve {formatUsd(lot.reserve_cents)} · {lot.price_cents >= lot.reserve_cents ? "met ✓" : "not met"}
-            </p>
-          )}
         </div>
         <div className="text-right">
           <p className="font-mono text-[11px] uppercase tracking-wider text-bone/40">

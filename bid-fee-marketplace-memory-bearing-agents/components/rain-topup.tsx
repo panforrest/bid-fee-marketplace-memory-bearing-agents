@@ -59,8 +59,8 @@ export function RainTopup({
       </div>
 
       <p className="mt-1 text-xs text-bone/50">
-        Settled in USDC, 24/7. Priced at par with credit-back — you buy bids at $0.60 and losing
-        bids return $0.60 in store credit.
+        Settled in USDC, 24/7 on stablecoin rails. Fund your bid allowance instantly — each bid
+        raises the price a fixed step, and the last bidder wins.
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">

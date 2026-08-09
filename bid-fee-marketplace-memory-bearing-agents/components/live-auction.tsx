@@ -19,13 +19,6 @@ const ERROR_COPY: Record<string, string> = {
   BAD_UNITS: "Invalid bid amount.",
 };
 
-// Bid tiers: how many increment-steps (= credits) each click spends.
-const BID_TIERS = [
-  { units: 1, label: "+$0.01" },
-  { units: 10, label: "+$0.10" },
-  { units: 100, label: "+$1.00" },
-];
-
 export function LiveAuction({
   auctionId,
   initialState,
@@ -154,8 +147,8 @@ export function LiveAuction({
   const isLeader = myOrgId != null && a.leader_org_id === myOrgId;
   const isClosed = a.status !== "live";
   const outOfBids = myBids != null && myBids < 1;
-  const reserveMet = a.reserve_cents == null || a.price_cents >= a.reserve_cents;
-  const bidDisabled = !ready || placing || isClosed || isLeader;
+  const nextPrice = a.price_cents + a.increment_cents;
+  const bidDisabled = !ready || placing || isClosed || isLeader || outOfBids;
 
   return (
     <div className="container grid grid-cols-1 gap-6 py-8 lg:grid-cols-3">
@@ -209,60 +202,40 @@ export function LiveAuction({
                 onExpire={refetch}
                 className="mt-1 text-base"
               />
-              {a.reserve_cents != null && (
-                <p className={`mt-2 text-[11px] ${reserveMet ? "text-cyan" : "text-gold"}`}>
-                  Reserve {formatUsd(a.reserve_cents)} · {reserveMet ? "met ✓" : "not met"}
-                </p>
+              {!isClosed && a.bid_count > 0 && (
+                <p className="mt-2 text-[11px] text-gold">going once — 15s resets on each bid</p>
               )}
             </div>
           </div>
 
-          {/* bid tiers */}
-          {!ready ? (
-            <div className="mt-6 w-full rounded-xl bg-white/5 px-6 py-4 text-center text-lg font-semibold text-bone/40">
-              Connecting…
-            </div>
-          ) : isClosed ? (
-            <div className="mt-6 w-full rounded-xl bg-white/5 px-6 py-4 text-center text-lg font-semibold text-bone/40">
-              Auction closed
-            </div>
-          ) : isLeader ? (
-            <div className="mt-6 w-full rounded-xl border border-cyan/30 bg-cyan/5 px-6 py-4 text-center text-lg font-semibold text-cyan">
-              You&apos;re the highest bidder
-            </div>
-          ) : (
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              {BID_TIERS.map((tier) => {
-                const priceInc = tier.units * a.increment_cents;
-                const cantAfford = myBids != null && myBids < tier.units;
-                const tierDisabled = bidDisabled || cantAfford;
-                return (
-                  <button
-                    key={tier.units}
-                    onClick={() => placeBid(tier.units)}
-                    disabled={tierDisabled}
-                    className={[
-                      "rounded-xl px-4 py-3 text-center transition-all",
-                      tierDisabled
-                        ? "cursor-not-allowed bg-white/5 text-bone/30"
-                        : "bg-cyan text-ink hover:bg-cyan-glow hover:shadow-[0_0_30px_rgba(31,200,222,0.35)]",
-                    ].join(" ")}
-                  >
-                    <span className="block text-lg font-semibold">{tier.label}</span>
-                    <span className="block text-xs opacity-80">→ {formatUsd(a.price_cents + priceInc)}</span>
-                    <span className="mt-0.5 block text-[11px] opacity-60">
-                      {tier.units} credit{tier.units > 1 ? "s" : ""}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {/* bid button */}
+          <button
+            onClick={() => placeBid(1)}
+            disabled={bidDisabled}
+            className={[
+              "mt-6 w-full rounded-xl px-6 py-4 text-lg font-semibold transition-all",
+              bidDisabled
+                ? "cursor-not-allowed bg-white/5 text-bone/40"
+                : "bg-cyan text-ink hover:bg-cyan-glow hover:shadow-[0_0_30px_rgba(31,200,222,0.4)]",
+            ].join(" ")}
+          >
+            {!ready
+              ? "Connecting…"
+              : isClosed
+              ? "Auction closed"
+              : isLeader
+              ? "You're the highest bidder"
+              : outOfBids
+              ? "Out of bids"
+              : placing
+              ? "Placing…"
+              : `Place bid → ${formatUsd(nextPrice)}`}
+          </button>
 
           <div className="mt-3 flex items-center justify-between text-xs text-bone/40">
             <span>
               {myBids != null ? (
-                <>Your bids: <span className="text-bone/70">{myBids}</span> · 1 credit raises the price {formatUsd(a.increment_cents)}</>
+                <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid +{formatUsd(a.increment_cents)}. Win if no one bids for 15s.</>
               ) : (
                 "Connecting your guest wallet…"
               )}
@@ -279,7 +252,7 @@ export function LiveAuction({
           )}
           {isClosed && (
             <div className="mt-4 rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 text-center text-sm text-gold">
-              Auction {a.status}. {a.winner_org_id ? "Winner assigned." : ""} Losing bids convert to store credit at par.
+              Auction {a.status}. {a.winner_org_id ? "The last bidder won." : "No bids — closed with no winner."}
             </div>
           )}
         </div>
