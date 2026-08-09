@@ -4,6 +4,8 @@ import { LotCard } from "@/components/lot-card";
 import { Lot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 async function getLots(): Promise<{ lots: Lot[]; error: string | null }> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -37,6 +39,9 @@ async function getLots(): Promise<{ lots: Lot[]; error: string | null }> {
 
 export default async function Home() {
   const { lots, error } = await getLots();
+  // Authoritative reference time captured on the server; the grid countdowns
+  // correct client-clock skew against this (matches the /lot page behaviour).
+  const serverNow = new Date().toISOString();
 
   return (
     <>
@@ -109,7 +114,7 @@ export default async function Home() {
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {lots.map((lot) => (
-              <LotCard key={lot.id} lot={lot} />
+              <LotCard key={lot.id} lot={lot} serverNow={serverNow} />
             ))}
           </div>
         )}

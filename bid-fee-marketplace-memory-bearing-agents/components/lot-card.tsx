@@ -3,7 +3,7 @@ import { Lot, formatCount } from "@/lib/types";
 import { formatUsd } from "@/lib/utils";
 import { Countdown } from "@/components/countdown";
 
-export function LotCard({ lot }: { lot: Lot }) {
+export function LotCard({ lot, serverNow }: { lot: Lot; serverNow?: string }) {
   const inst = lot.instance;
   return (
     <Link
@@ -23,7 +23,7 @@ export function LotCard({ lot }: { lot: Lot }) {
             </p>
           </div>
         </div>
-        <Countdown endsAt={lot.ends_at} />
+        <Countdown endsAt={lot.ends_at} serverNow={serverNow} />
       </div>
 
       {/* summary */}
