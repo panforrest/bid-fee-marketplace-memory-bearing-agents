@@ -209,8 +209,10 @@ export function LiveAuction({
                 onExpire={refetch}
                 className="mt-1 text-base"
               />
-              {!reserveMet && (
-                <p className="mt-2 text-[11px] text-gold">reserve not yet met</p>
+              {a.reserve_cents != null && (
+                <p className={`mt-2 text-[11px] ${reserveMet ? "text-cyan" : "text-gold"}`}>
+                  Reserve {formatUsd(a.reserve_cents)} · {reserveMet ? "met ✓" : "not met"}
+                </p>
               )}
             </div>
           </div>
