@@ -83,7 +83,7 @@ export default async function Home() {
           <span>
             <b className="text-bone/80">House accounts cannot bid</b> — enforced by a database constraint, not a policy.
           </span>
-          <span className="hidden sm:inline">Every bid is publicly auditable. After 1 hour with no new bid, the last bidder wins.</span>
+          <span className="hidden sm:inline">Every bid is publicly auditable. After 1 month with no new bid, the last bidder wins.</span>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export default async function Home() {
       <footer className="border-t border-border py-10">
         <div className="container flex flex-col items-center gap-2 text-center text-xs text-bone/40">
           <p>Memoria · built for the Raingentic Commerce Hackathon NYC</p>
-          <p>Flat-fee auction · 1-hour going-once timer · publicly auditable · B2B only</p>
+          <p>Flat-fee auction · 1-month going-once timer · publicly auditable · B2B only</p>
         </div>
       </footer>
     </>

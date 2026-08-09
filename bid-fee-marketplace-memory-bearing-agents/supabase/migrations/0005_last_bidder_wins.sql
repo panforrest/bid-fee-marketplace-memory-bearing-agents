@@ -5,7 +5,7 @@
 --   * The price DOES NOT ascend after it's set.
 --   * All bid fees accrue to the SELLER, in real time, auditably.
 --   * NO reserve. NO credit-back (losing bids are not refunded).
---   * Each bid resets the clock to 1 hour; when it expires, the LAST bidder wins.
+--   * Each bid resets the clock to 1 month; when it expires, the LAST bidder wins.
 --   * Demo auctions are reset to "awaiting opening bid"; wallets topped up.
 -- Run AFTER 0001–0004 (Supabase SQL Editor -> paste -> Run). ONE file only.
 -- ============================================================================
@@ -18,9 +18,9 @@ alter type entry_kind add value if not exists 'seller_proceeds';
 -- (2) Locked flat per-bid amount (in credits). NULL until the opening bid.
 alter table auctions add column if not exists flat_bid_units integer;
 
--- (2b) The "going once" window is 1 hour. place_bid() resets ends_at to
---      now() + extend_seconds on every bid, so this makes it a 1-hour timer.
-alter table auctions alter column extend_seconds set default 3600;
+-- (2b) The "going once" window is 1 month. place_bid() resets ends_at to
+--      now() + extend_seconds on every bid, so this makes it a 1-month timer.
+alter table auctions alter column extend_seconds set default 2592000;
 
 -- (3) Reset the demo auctions to "awaiting opening bid". The append-only
 --     triggers block DELETE, so disable them just for this reset, then re-enable.
@@ -45,8 +45,8 @@ update auctions set
   reserve_cents  = null,
   settled_at     = null,
   status         = 'live',
-  extend_seconds = 3600,               -- 1-hour going-once window
-  ends_at        = now() + interval '1 hour';
+  extend_seconds = 2592000,            -- 1-month going-once window (30*24*3600)
+  ends_at        = now() + interval '1 month';
 
 -- put the assets back on the block
 update agent_instances set status = 'listed' where status = 'sold';
@@ -99,7 +99,7 @@ end $$;
 --   * SUBSEQUENT bids: the caller's p_units is ignored; the locked flat amount
 --     is used. Price never changes.
 --   * Every bid: deduct flat from bidder, credit the SELLER the flat amount
---     (auditable), set bidder as leader, reset clock to 1 hour, record bid + event.
+--     (auditable), set bidder as leader, reset clock to 1 month, record bid + event.
 -- ---------------------------------------------------------------------------
 create or replace function place_bid(p_auction_id uuid, p_units integer default 1)
 returns table (
@@ -149,7 +149,7 @@ begin
     return query select false, v_auction.price_cents, v_auction.ends_at, 0,0,'INSUFFICIENT_BIDS'; return;
   end if;
 
-  -- Reset the 1-hour "going once" window on every bid. Price set once (opening).
+  -- Reset the 1-month "going once" window on every bid. Price set once (opening).
   v_new_end := now() + (v_auction.extend_seconds || ' seconds')::interval;
   v_seq := v_auction.bid_count + 1;
 
