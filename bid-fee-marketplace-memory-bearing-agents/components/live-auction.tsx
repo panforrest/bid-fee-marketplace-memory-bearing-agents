@@ -360,7 +360,7 @@ export function LiveAuction({
                 className="mt-1 text-base"
               />
               {!isClosed && a.bid_count > 0 && (
-                <p className="mt-2 text-[11px] text-gold">going once — 2 min resets on each bid</p>
+                <p className="mt-2 text-[11px] text-gold">going once — 1 hour resets on each bid</p>
               )}
             </div>
           </div>
@@ -436,9 +436,9 @@ export function LiveAuction({
             <span>
               {myBids != null ? (
                 priceSet ? (
-                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {formatTokens(flatPrice)}, flat, same for everyone. Win if no one bids for 2 min.</>
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {formatTokens(flatPrice)}, flat, same for everyone. Win if no one bids for 1 hour.</>
                 ) : (
-                  <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 2 min wins.</>
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 1 hour wins.</>
                 )
               ) : (
                 "Connecting your guest wallet…"
