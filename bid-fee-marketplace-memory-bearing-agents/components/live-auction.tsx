@@ -32,7 +32,7 @@ export function LiveAuction({
   const [myBids, setMyBids] = useState<number | null>(null);
   const [placing, setPlacing] = useState(false);
   const [ready, setReady] = useState(false);
-  const [openAmount, setOpenAmount] = useState<number>(1000); // opening-bid entry (credits)
+  const [openAmount, setOpenAmount] = useState<number>(100); // opening-bid entry (credits) — $1.00 default
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastBidAt = useRef(0);
 
@@ -222,7 +222,7 @@ export function LiveAuction({
                 className="mt-1 text-base"
               />
               {!isClosed && a.bid_count > 0 && (
-                <p className="mt-2 text-[11px] text-gold">going once — 30 min resets on each bid</p>
+                <p className="mt-2 text-[11px] text-gold">going once — 2 min resets on each bid</p>
               )}
             </div>
           </div>
@@ -298,9 +298,9 @@ export function LiveAuction({
             <span>
               {myBids != null ? (
                 priceSet ? (
-                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {lockedUnits} credits ({formatUsd(flatPrice)}), same for everyone. Win if no one bids for 30 min.</>
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · each bid = {lockedUnits} credits ({formatUsd(flatPrice)}), same for everyone. Win if no one bids for 2 min.</>
                 ) : (
-                  <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 30 min wins.</>
+                  <>Your bids: <span className="text-bone/70">{myBids}</span> · the opening bid sets one flat amount for the whole auction. Last bidder after 2 min wins.</>
                 )
               ) : (
                 "Connecting your guest wallet…"
