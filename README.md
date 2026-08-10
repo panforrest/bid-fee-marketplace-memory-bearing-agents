@@ -1,4 +1,4 @@
-Here is the updated, integrated project documentation with your name (Jitender Thakur) restored to the team roster and technical lead structure:
+
 Raingentic Commerce Infrastructure
 Hackathon: Raingentic Commerce Hackathon NYC (August 8–9, 2026)
 Co-Hosts: Hosted by Encode Club in collaboration with Rain (stablecoin payments platform) and Monad Foundation (high-throughput EVM Layer-1 blockchain).
